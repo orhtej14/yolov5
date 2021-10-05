@@ -17,7 +17,7 @@ from utils.plots import Annotator, colors
 from utils.torch_utils import select_device, time_sync
 
 class Detech:
-    weights='latest_med_70.pt'  # model.pt path(s)
+    weights='DetechModel.pt'  # model.pt path(s)
     source='0'  # file/dir/URL/glob, 0 for webcam
     imgsz=640  # inference size (pixels)
     conf_thres=0.25  # confidence threshold
