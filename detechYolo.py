@@ -4,6 +4,7 @@ from pathlib import Path
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
+import mysql.connector as mc
 
 FILE = Path(__file__).resolve()
 sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
@@ -15,6 +16,7 @@ from utils.general import check_img_size, check_imshow, colorstr, is_ascii, \
     save_one_box, check_suffix
 from utils.plots import Annotator, colors
 from utils.torch_utils import select_device, time_sync
+
 
 class Detech:
     weights='DetechModel.pt'  # model.pt path(s)
@@ -46,7 +48,7 @@ class Detech:
     names = None
     stride = None
     ascii = None
-    view_img = None
+    # view_img = None
     pt = None
     dataset = None
     bs = None
@@ -54,12 +56,19 @@ class Detech:
     save_dir = None
     vid_path = None
     vid_writer = None
+    isDetecting = False
+    frame = None
+    cameraName = None
+    Notifies = False
+    hasViolator = False
+    classNames = {"" : 0}
 
-    def __init__(self, weights, source, imgsz, device) -> None:
+    def __init__(self, weights, source, imgsz, device, cameraName) -> None:
         self.weights = weights
         self.source = source
         self.imgsz = imgsz
         self.device = device
+        self.cameraName = cameraName
 
         FILE = Path(__file__).resolve()
         sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
@@ -90,6 +99,11 @@ class Detech:
             
         self.imgsz = check_img_size(self.imgsz, s=self.stride)  # check image size
         self.ascii = is_ascii(self.names)  # names are ascii (use PIL for UTF-8)
+        self.model.names[0] = "with both"
+        self.model.names[1] = "facemask only"
+        self.model.names[2] = "faceshield only"
+        self.model.names[3] = "without both"
+        print("Class names: ",self.model.names)
 
     def loadData(self):
         if self.webcam:
@@ -102,13 +116,32 @@ class Detech:
             self.bs = 1  # batch_size
         self.vid_path, self.vid_writer = [None] * self.bs, [None] * self.bs
 
+    def startInference(self):
+        self.isDetecting = True
+        self.runInference()
+
+    def stopInference(self):
+        self.isDetecting = False
+
     def runInference(self):
+        violators = int(0)
+        checker = int(0)
+        fileName = ""
+        self.classNames = {
+            "with both": 0,
+            "facemask only": 0,
+            "faceshield only": 0,
+            "without both": 0
+        }
         if self.pt and self.device.type != 'cpu':
             self.model(torch.zeros(1, 3, *self.imgsz).to(self.device).type_as(next(self.model.parameters())))  # run once
 
         dt, seen = [0.0, 0.0, 0.0], 0
 
         for path, img, im0s, vid_cap in self.dataset:
+            if not self.isDetecting:
+                break
+
             t1 = time_sync()
             img = torch.from_numpy(img).to(self.device)
             img = img.half() if self.half else img.float()  # uint8 to fp16/32
@@ -149,10 +182,22 @@ class Detech:
                     # Rescale boxes from img_size to im0 size
                     det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
-                    # Print results
+                    # Print and save results
                     for c in det[:, -1].unique():
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
+                        if self.names[int(c)] != "with both" and n >= 1:
+                            print("Violator Detected")
+                            print("Data types: (n) = " + str(type(f"{n}")))
+                            print("Data types: self.names[int(c)] = " + str(type(self.names[int(c)])))
+                            self.classNames[self.names[int(c)]] = n
+                            self.hasViolator = True
+                            violators = int(n)
+                            # if n != violators:
+                                
+                            #     # cv2.imwrite(fileName, annotator.result())
+                            #     # print("Write complete")
+                            #     violators = n
 
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
@@ -174,28 +219,59 @@ class Detech:
 
                 # Stream results
                 im0 = annotator.result()
+                self.frame = im0
+
+                # 
+                if self.hasViolator and checker != violators:
+                    fileName = "violators\\" +str(time_sync()) +".jpg"
+                    self.saveScreenshot(fileName, im0)
+                    for violation in self.classNames:
+                        if violation != "with both" and self.classNames[violation] != 0:
+                            self.screenshotDb(violation, self.classNames[violation], self.cameraName, fileName)
+                            
+                    self.hasViolator = False
+                    checker = violators
+
                 if self.view_img:
                     cv2.imshow(str(p), im0)
                     cv2.waitKey(1)  # 1 millisecond
 
                 # Save results (image with detections)
-                if self.save_img:
-                    if self.dataset.mode == 'image':
-                        cv2.imwrite(save_path, im0)
-                    else:  # 'video' or 'stream'
-                        if self.vid_path[i] != save_path:  # new video
-                            self.vid_path[i] = save_path
-                            if isinstance(self.vid_writer[i], cv2.VideoWriter):
-                                self.vid_writer[i].release()  # release previous video writer
-                            if vid_cap:  # video
-                                fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                                w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                                h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                            else:  # stream
-                                fps, w, h = 30, im0.shape[1], im0.shape[0]
-                                save_path += '.mp4'
-                            self.vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                        self.vid_writer[i].write(im0)
+                # if self.save_img:
+                #     if self.dataset.mode == 'image':
+                #         cv2.imwrite(save_path, im0)
+                #     else:  # 'video' or 'stream'
+                #         if self.vid_path[i] != save_path:  # new video
+                #             self.vid_path[i] = save_path
+                #             if isinstance(self.vid_writer[i], cv2.VideoWriter):
+                #                 self.vid_writer[i].release()  # release previous video writer
+                #             if vid_cap:  # video
+                #                 fps = vid_cap.get(cv2.CAP_PROP_FPS)
+                #                 w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                #                 h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                #             else:  # stream
+                #                 fps, w, h = 30, im0.shape[1], im0.shape[0]
+                #                 save_path += '.mp4'
+                #             self.vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+                #         self.vid_writer[i].write(im0)
 
-    
+    def saveScreenshot(self, name, img):
+        # fileName = "violators\\" +str(time_sync()) +".jpg"
+        cv2.imwrite(name, img)
+
+    def screenshotDb(self, violation, quantity, camera, name):
+        mydb = mc.connect(
+            host="localhost",
+            user="root",
+            password="",
+            database="detech"
+        )
+
+        myCursor = mydb.cursor()
+        insert = "INSERT INTO violators (violation, quantity, camera, filename) VALUES (%s, %s, %s, %s)"
+        value = (violation, int(f"{quantity}"), camera, name)
+        myCursor.execute(insert, value)
+        mydb.commit()
+
+
 
