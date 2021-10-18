@@ -49,7 +49,6 @@ class Detech:
     names = None
     stride = None
     ascii = None
-    # view_img = None
     pt = None
     dataset = None
     bs = None
@@ -127,8 +126,6 @@ class Detech:
         self.isDetecting = False
 
     def runInference(self):
-        # violators = int(0)
-        # checker = int(0)
         fileName = ""
         hasFileName = False
 
@@ -232,14 +229,14 @@ class Detech:
                             fileName = "violators\\" +str(time_sync()) +".jpg"
                             hasFileName = True
                         self.saveScreenshot(fileName, im0)
-                        self.screenshotDb(violation, self.classNames[violation], self.cameraName, fileName)
+                        # self.screenshotDb(violation, self.classNames[violation], self.cameraName, fileName)
                     else:
                         print("Nothing new")
-                        print(self.checker)
 
+                
+                print(self.checker)
                 self.checker = self.classNames
                     
-                # checker = violators
                 hasFileName = False
 
                 if self.view_img:
@@ -247,7 +244,6 @@ class Detech:
                     cv2.waitKey(1)  # 1 millisecond
 
     def saveScreenshot(self, name, img):
-        # fileName = "violators\\" +str(time_sync()) +".jpg"
         cv2.imwrite(name, img)
 
     def screenshotDb(self, violation, quantity, camera, name):
