@@ -230,9 +230,8 @@ class Detech:
                             hasFileName = True
                         self.saveScreenshot(fileName, im0)
                         # self.screenshotDb(violation, self.classNames[violation], self.cameraName, fileName)
-                    else:
-                        print("Nothing new")
-
+                        
+                print("Nothing new")
                 
                 print(self.checker)
                 self.checker = self.classNames
