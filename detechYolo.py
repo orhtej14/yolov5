@@ -23,7 +23,7 @@ class Detech:
     weights='DetechModel.pt'  # model.pt path(s)
     source='0'  # file/dir/URL/glob, 0 for webcam
     imgsz=640  # inference size (pixels)
-    conf_thres=0.7  # confidence threshold
+    conf_thres=0.6  # confidence threshold
     iou_thres=0.45  # NMS IOU threshold
     max_det=1000  # maximum detections per image
     device='cpu'  # cuda device, i.e. 0 or 0,1,2,3 or cpu
@@ -142,6 +142,7 @@ class Detech:
         dt, seen = [0.0, 0.0, 0.0], 0
 
         for path, img, im0s, vid_cap in self.dataset:
+            
             if not self.isDetecting:
                 break
 
