@@ -21,23 +21,19 @@ from utils.torch_utils import select_device, time_sync
 
 
 class Detech:
-    weights='DetechModel.pt'  # model.pt path(s)
-    source='0'  # file/dir/URL/glob, 0 for webcam
-    imgsz=640  # inference size (pixels)
     conf_thres=0.6  # confidence threshold
     iou_thres=0.45  # NMS IOU threshold
     max_det=1000  # maximum detections per image
     device='cpu'  # cuda device, i.e. 0 or 0,1,2,3 or cpu
     view_img=False  # show results
+    save_img=False
     save_txt=False  # save results to *.txt
     save_conf=False  # save confidences in --save-txt labels
     save_crop=False  # save cropped prediction boxes
-    nosave=False  # do not save images/videos
-    classes=None  # filter by class: --class 0, or --class 0 2 3
+    nosave=True  # do not save images/videos
     agnostic_nms=False  # class-agnostic NMS
     augment=False  # augmented inference
     visualize=False  # visualize features
-    update=False  # update all models
     project='runs/detect'  # save results to project/name
     name='exp'  # save results to project/name
     exist_ok=False  # existing project/name ok, do not increment
@@ -45,37 +41,37 @@ class Detech:
     hide_labels=False  # hide labels
     hide_conf=False  # hide confidences
     half=False  # use FP16 half-precision inference
-    save_img = not nosave and not source.endswith('.txt')  # save inference images
-    webcam = True
-    names = None
-    stride = None
-    ascii = None
-    pt = None
-    dataset = None
-    bs = None
-    model = None
-    save_dir = None
-    vid_path = None
-    vid_writer = None
-    isDetecting = False
-    frame = None
-    cameraName = None
-    Notifies = False
-    hasViolator = False
-    classNames = {"" : 0}
-    checker = {"": 0}
 
-    def __init__(self, weights, source, imgsz, device, cameraName, classes) -> None:
+    def __init__(self, weights='DetechModel.pt', source='0', imgsz='640', device='cpu', cameraName='cctv', classes=None) -> None:
         self.weights = weights
         self.source = source
         self.imgsz = imgsz
         self.device = device
         self.cameraName = cameraName
         self.classes = classes
-        self.th = threading.Thread(target=self.runInference)
+        self.th = threading.Thread(target=self.runInference, daemon=True)
+        self.isDetecting = False
+        self.frame = None
+        self.webcam = True
+        self.names = None
+        self.stride = None
+        self.ascii = None
+        self.pt = None
+        self.dataset = None
+        self.bs = None
+        self.model = None
+        self.save_dir = None
+        self.vid_path = None
+        self.vid_writer = None
+        self.Notifies = False
+        self.hasViolator = False
+        self.classNames = {"" : 0}
+        self.checker = {"": 0}
+        self.show_res = False
 
         FILE = Path(__file__).resolve()
         sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
+        save_img = not self.nosave and not self.source.endswith('.txt')  # save inference images
 
         # Directories
         self.save_dir = increment_path(Path(self.project) / self.name, exist_ok=self.exist_ok)  # increment run
@@ -236,7 +232,7 @@ class Detech:
                             fileName = "violators\\" +str(time_sync()) +".jpg"
                             hasFileName = True
                         self.saveScreenshot(fileName, im0)
-                        # self.screenshotDb(violation, self.classNames[violation], self.cameraName, fileName)
+                        self.screenshotDb(violation, self.classNames[violation], self.cameraName, fileName)
                         
                 print("Nothing new")
                 
@@ -245,7 +241,7 @@ class Detech:
                     
                 hasFileName = False
 
-                if self.view_img:
+                if self.view_img and self.show_res:
                     cv2.imshow(str(p), im0)
                     cv2.waitKey(1)  # 1 millisecond
 
