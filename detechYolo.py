@@ -6,6 +6,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import mysql.connector as mc
 from playsound import playsound
+import threading
 
 FILE = Path(__file__).resolve()
 sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
@@ -71,6 +72,7 @@ class Detech:
         self.device = device
         self.cameraName = cameraName
         self.classes = classes
+        self.th = threading.Thread(target=self.runInference)
 
         FILE = Path(__file__).resolve()
         sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
@@ -119,11 +121,15 @@ class Detech:
         self.vid_path, self.vid_writer = [None] * self.bs, [None] * self.bs
 
     def startInference(self):
+        self.loadModel()
+        self.loadData()
         self.isDetecting = True
-        self.runInference()
+        self.th.start()
+        # self.runInference()
 
     def stopInference(self):
         self.isDetecting = False
+        self.th.join()
 
     def runInference(self):
         fileName = ""
