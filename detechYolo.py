@@ -21,7 +21,7 @@ from utils.torch_utils import select_device, time_sync
 
 
 class Detech:
-    conf_thres=0.6  # confidence threshold
+    conf_thres=0.7  # confidence threshold
     iou_thres=0.45  # NMS IOU threshold
     max_det=1000  # maximum detections per image
     device='cpu'  # cuda device, i.e. 0 or 0,1,2,3 or cpu
@@ -42,7 +42,7 @@ class Detech:
     hide_conf=False  # hide confidences
     half=False  # use FP16 half-precision inference
 
-    def __init__(self, weights='DetechModel.pt', source='0', imgsz='640', device='cpu', cameraName='cctv', classes=None) -> None:
+    def __init__(self, weights='DetechModel.pt', source='0', imgsz='640', device='cpu', cameraName='cctv', classes=None, selectedClass=0) -> None:
         self.weights = weights
         self.source = source
         self.imgsz = imgsz
@@ -68,6 +68,8 @@ class Detech:
         self.classNames = {"" : 0}
         self.checker = {"": 0}
         self.show_res = False
+        self.selectedClass = selectedClass
+
 
         FILE = Path(__file__).resolve()
         sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
@@ -146,6 +148,7 @@ class Detech:
         for path, img, im0s, vid_cap in self.dataset:
             
             if not self.isDetecting:
+                print("breaking")
                 break
 
             self.classNames = {
@@ -199,7 +202,9 @@ class Detech:
                     for c in det[:, -1].unique():
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
-                        if self.names[int(c)] != "with both":
+
+                        # If violator detected
+                        if self.names[int(c)] != self.model.names[self.selectedClass]:
                             self.classNames[self.names[int(c)]] = int(n)
 
                     # Write results
@@ -219,22 +224,22 @@ class Detech:
 
                 # Print time (inference-only)
                 print(f'{s}Done. ({t3 - t2:.3f}s)')
+                print(f'{1/(t3 - t2)} FPS')
 
                 # Stream results
                 im0 = annotator.result()
                 self.frame = im0
 
+                # Check violators and changes in qty
                 for violation in self.classNames:
-                    if violation != "with both" and self.classNames[violation] != self.checker[violation] and self.classNames[violation] != 0:
+                    if violation != self.model.names[self.selectedClass] and self.classNames[violation] != self.checker[violation] and self.classNames[violation] != 0:
                         print("New Detection")
-                        playsound('sounds/notification.wav', False)
+                        playsound('sounds/notification.wav', False) # Play sound
                         if hasFileName == False:
                             fileName = "violators\\" +str(time_sync()) +".jpg"
                             hasFileName = True
                         self.saveScreenshot(fileName, im0)
                         self.screenshotDb(violation, self.classNames[violation], self.cameraName, fileName)
-                        
-                print("Nothing new")
                 
                 print(self.checker)
                 self.checker = self.classNames
@@ -244,10 +249,14 @@ class Detech:
                 if self.view_img and self.show_res:
                     cv2.imshow(str(p), im0)
                     cv2.waitKey(1)  # 1 millisecond
+                
+                print("")
 
+    # Save screenshot to local
     def saveScreenshot(self, name, img):
         cv2.imwrite(name, img)
 
+    # save info to DB
     def screenshotDb(self, violation, quantity, camera, name):
         mydb = mc.connect(
             host="localhost",
