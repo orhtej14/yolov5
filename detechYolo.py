@@ -267,7 +267,7 @@ class Detech:
         )
 
         myCursor = mydb.cursor()
-        insert = "INSERT INTO violators (violation, quantity, camera, filename) VALUES (%s, %s, %s, %s, %s)"
+        insert = "INSERT INTO violators (user_id ,violation, quantity, camera, filename) VALUES (%s, %s, %s, %s, %s)"
         value = (self.user_id, violation, int(f"{quantity}"), camera, name)
         myCursor.execute(insert, value)
         mydb.commit()
