@@ -42,7 +42,7 @@ class Detech:
     hide_conf=False  # hide confidences
     half=False  # use FP16 half-precision inference
 
-    def __init__(self, weights='DetechModel.pt', source='0', imgsz='640', device='cpu', cameraName='cctv', classes=None, selectedClass=0) -> None:
+    def __init__(self, weights='DetechModel.pt', source='0', imgsz='640', device='cpu', cameraName='cctv', classes=None, selectedClass=0, user_id=0) -> None:
         self.weights = weights
         self.source = source
         self.imgsz = imgsz
@@ -69,6 +69,7 @@ class Detech:
         self.checker = {"": 0}
         self.show_res = False
         self.selectedClass = selectedClass
+        self.user_id = user_id
 
 
         FILE = Path(__file__).resolve()
@@ -266,8 +267,8 @@ class Detech:
         )
 
         myCursor = mydb.cursor()
-        insert = "INSERT INTO violators (violation, quantity, camera, filename) VALUES (%s, %s, %s, %s)"
-        value = (violation, int(f"{quantity}"), camera, name)
+        insert = "INSERT INTO violators (violation, quantity, camera, filename) VALUES (%s, %s, %s, %s, %s)"
+        value = (self.user_id, violation, int(f"{quantity}"), camera, name)
         myCursor.execute(insert, value)
         mydb.commit()
 
