@@ -282,6 +282,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
         self.mode = 'stream'
         self.img_size = img_size
         self.stride = stride
+        self.isActive = True
 
         if os.path.isfile(sources):
             with open(sources, 'r') as f:
@@ -311,6 +312,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
             self.frames[i] = float('inf')  # infinite stream fallback
 
             _, self.imgs[i] = cap.read()  # guarantee first frame
+            self.bufferController = BufferController(cap)
             self.threads[i] = Thread(target=self.update, args=([i, cap]), daemon=True)
             print(f" success ({self.frames[i]} frames {w}x{h} at {self.fps[i]:.2f} FPS)")
             self.threads[i].start()
@@ -322,15 +324,16 @@ class LoadStreams:  # multiple IP or RTSP cameras
         if not self.rect:
             print('WARNING: Different stream shapes detected. For optimal performance supply similarly-shaped streams.')
 
+    #ffffff
     def update(self, i, cap):
         # Read stream `i` frames in daemon thread
         n, f, read = 12, self.frames[i], 12  # frame number, frame array, inference every 'read' frame
         while cap.isOpened() and n < f:
             n += 1
             # _, self.imgs[index] = cap.read()
-            cap.grab()
-            if n % read == 1:
-                success, im = cap.retrieve()
+            # self.bufferController.camera.grab()
+            if n % read == 0 and self.bufferController.last_frame is not None:
+                success, im = self.bufferController.last_frame
                 self.imgs[i] = im if success else self.imgs[i] * 0
             time.sleep(1 / self.fps[i])  # wait time
 
@@ -340,9 +343,10 @@ class LoadStreams:  # multiple IP or RTSP cameras
 
     def __next__(self):
         self.count += 1
-        if not all(x.is_alive() for x in self.threads) or cv2.waitKey(1) == ord('q'):  # q to quit
+        if not all(x.is_alive() for x in self.threads) or cv2.waitKey(1) == ord('q') or self.isActive == False:  # q to quit
             cv2.destroyAllWindows()
             raise StopIteration
+
 
         # Letterbox
         img0 = self.imgs.copy()
@@ -359,6 +363,9 @@ class LoadStreams:  # multiple IP or RTSP cameras
 
     def __len__(self):
         return len(self.sources)  # 1E12 frames = 32 streams at 30 FPS for 30 years
+
+    def stop(self):
+        self.isActive = False
 
 
 def img2label_paths(img_paths):
@@ -1002,3 +1009,17 @@ def dataset_stats(path='coco128.yaml', autodownload=False, verbose=False, profil
     if verbose:
         print(json.dumps(stats, indent=2, sort_keys=False))
     return stats
+
+class BufferController(Thread):
+    def __init__(self, camera, name='Buffer_Controller_for_RTSP'):
+        self.camera = camera
+        self.last_frame = None
+        self.running = False
+        super(BufferController, self).__init__(name=name, daemon=True)
+        self.start()
+
+    def run(self):
+        while True:
+            self.camera.grab()
+            self.last_frame = self.camera.retrieve()
+            # time.sleep()
