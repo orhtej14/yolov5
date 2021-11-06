@@ -128,6 +128,7 @@ class Detech:
 
     def stopInference(self):
         self.isDetecting = False
+        self.dataset.stop()
         self.th.join()
 
     def runInference(self):
@@ -218,7 +219,7 @@ class Detech:
 
                         if self.save_img or self.save_crop or self.view_img:  # Add bbox to image
                             c = int(cls)  # integer class
-                            label = None if self.hide_labels else (self.names[c] if self.hide_conf else f'{self.names[c]} {conf:.2f}')
+                            label = None if self.hide_labels else (self.names[c] if self.hide_conf else f'{self.names[c]} {1.0*conf:.1f}')
                             annotator.box_label(xyxy, label, color=colors(c, True))
                             if self.save_crop:
                                 save_one_box(xyxy, imc, file=self.save_dir / 'crops' / self.names[c] / f'{p.stem}.jpg', BGR=True)
@@ -267,7 +268,7 @@ class Detech:
         )
 
         myCursor = mydb.cursor()
-        insert = "INSERT INTO violators (user_id ,violation, quantity, camera, filename) VALUES (%s, %s, %s, %s, %s)"
+        insert = "INSERT INTO violators (user_id, violation, quantity, camera, filename) VALUES (%s, %s, %s, %s, %s)"
         value = (self.user_id, violation, int(f"{quantity}"), camera, name)
         myCursor.execute(insert, value)
         mydb.commit()
