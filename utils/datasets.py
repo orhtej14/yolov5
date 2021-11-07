@@ -306,8 +306,6 @@ class LoadStreams:  # multiple IP or RTSP cameras
             assert cap.isOpened(), f'Failed to open {s}'
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-           # self.fps[i] = max(cap.get(cv2.CAP_PROP_FPS) % 100, 0) or 30.0  # 30 FPS fallback
-           # self.frames[i] = max(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), 0) or float('inf')  # infinite stream fallback
             self.fps[i] = 30.0  # 30 FPS fallback
             self.frames[i] = float('inf')  # infinite stream fallback
 
@@ -1010,6 +1008,7 @@ def dataset_stats(path='coco128.yaml', autodownload=False, verbose=False, profil
         print(json.dumps(stats, indent=2, sort_keys=False))
     return stats
 
+#ffffff
 class BufferController(Thread):
     def __init__(self, camera, name='Buffer_Controller_for_RTSP'):
         self.camera = camera
