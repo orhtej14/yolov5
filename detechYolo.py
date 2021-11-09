@@ -7,6 +7,7 @@ import torch.backends.cudnn as cudnn
 import mysql.connector as mc
 from playsound import playsound
 import threading
+import datetime
 
 FILE = Path(__file__).resolve()
 sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
@@ -142,6 +143,13 @@ class Detech:
             "without both": 0
         }
 
+        self.percentage = {
+            "with both": 0,
+            "facemask only": 0,
+            "faceshield only": 0,
+            "without both": 0
+        }
+
         if self.pt and self.device.type != 'cpu':
             self.model(torch.zeros(1, 3, *self.imgsz).to(self.device).type_as(next(self.model.parameters())))  # run once
 
@@ -150,7 +158,7 @@ class Detech:
         for path, img, im0s, vid_cap in self.dataset:
             
             if not self.isDetecting:
-                print("breaking")
+                # print("breaking")
                 break
 
             self.classNames = {
@@ -160,6 +168,7 @@ class Detech:
             "without both": 0
             }
 
+            self.quantity = 0
             t1 = time_sync()
             img = torch.from_numpy(img).to(self.device)
             img = img.half() if self.half else img.float()  # uint8 to fp16/32
@@ -183,6 +192,7 @@ class Detech:
 
             # Process predictions
             for i, det in enumerate(pred):  # per image
+                detections = 0
                 seen += 1
                 if self.webcam:  # batch_size >= 1
                     p, s, im0, frame = path[i], f'{i}: ', im0s[i].copy(), self.dataset.count
@@ -204,10 +214,11 @@ class Detech:
                     for c in det[:, -1].unique():
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
-
+                        detections += int(n)
                         # If violator detected
-                        if self.names[int(c)] != self.model.names[self.selectedClass]:
-                            self.classNames[self.names[int(c)]] = int(n)
+                        # if self.names[int(c)] != self.model.names[self.selectedClass]:
+                        self.classNames[self.names[int(c)]] = int(n)
+
 
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
@@ -219,30 +230,48 @@ class Detech:
 
                         if self.save_img or self.save_crop or self.view_img:  # Add bbox to image
                             c = int(cls)  # integer class
-                            label = None if self.hide_labels else (self.names[c] if self.hide_conf else f'{self.names[c]} {1.0*conf:.1f}')
+                            label = None if self.hide_labels else (self.names[c] if self.hide_conf else f'{self.names[c]} {100.0*conf:.1f}%')
                             annotator.box_label(xyxy, label, color=colors(c, True))
                             if self.save_crop:
                                 save_one_box(xyxy, imc, file=self.save_dir / 'crops' / self.names[c] / f'{p.stem}.jpg', BGR=True)
 
                 # Print time (inference-only)
-                print(f'{s}Done. ({t3 - t2:.3f}s)')
-                print(f'{1/(t3 - t2)} FPS')
+                # print(f'{s}Done. ({t3 - t2:.3f}s)')
+                # print(f'{1/(t3 - t2)} FPS')
 
                 # Stream results
                 im0 = annotator.result()
-                self.frame = im0
+                # im0.putText(self.classNames)
+                
+                
+                # cv2.cvtColor(im0, cv2.COLOR_BGR2RGB)
+
+
 
                 # Check violators and changes in qty
                 for violation in self.classNames:
+                    if detections == 0:
+                        self.percentage[violation] = "0.0"
+                    else:
+                        self.percentage[violation] = f"{100*float(self.classNames[violation]/detections):.1f}"
                     if violation != self.model.names[self.selectedClass] and self.classNames[violation] != self.checker[violation] and self.classNames[violation] != 0:
-                        print("New Detection")
+                        # print("New Detection")
                         playsound('sounds/notification.wav', False) # Play sound
                         if hasFileName == False:
-                            fileName = "violators\\" +str(time_sync()) +".jpg"
+                            dateFormat = datetime.datetime.now()
+                            dateString = dateFormat.strftime("%d-%m-%Y-%H-%M-%S-%f")
+                            fileName = f"violators/{dateString}.jpg"
                             hasFileName = True
                         self.saveScreenshot(fileName, im0)
                         self.screenshotDb(violation, self.classNames[violation], self.cameraName, fileName)
                 
+                # Write percentage value
+                space = 15
+                for classnames in self.classNames:
+                    cv2.putText(im0, f"{classnames}: {self.percentage[classnames]}%", (0,space), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
+                    space += 20
+
+                self.frame = im0
                 print(self.checker)
                 self.checker = self.classNames
                     
@@ -252,7 +281,7 @@ class Detech:
                     cv2.imshow(str(p), im0)
                     cv2.waitKey(1)  # 1 millisecond
                 
-                print("")
+                # print("")
 
     # Save screenshot to local
     def saveScreenshot(self, name, img):

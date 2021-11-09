@@ -1021,4 +1021,3 @@ class BufferController(Thread):
         while True:
             self.camera.grab()
             self.last_frame = self.camera.retrieve()
-            # time.sleep()
