@@ -25,7 +25,7 @@ class Detech:
     conf_thres=0.7  # confidence threshold
     iou_thres=0.45  # NMS IOU threshold
     max_det=1000  # maximum detections per image
-    device='cpu'  # cuda device, i.e. 0 or 0,1,2,3 or cpu
+    # device='cpu'  # cuda device, i.e. 0 or 0,1,2,3 or cpu
     view_img=False  # show results
     save_img=False
     save_txt=False  # save results to *.txt
@@ -43,7 +43,7 @@ class Detech:
     hide_conf=False  # hide confidences
     half=False  # use FP16 half-precision inference
 
-    def __init__(self, weights='DetechModel.pt', source='0', imgsz='640', device='cpu', cameraName='cctv', classes=None, selectedClass=0, user_id=0) -> None:
+    def __init__(self, weights='DetechModel.pt', source='0', imgsz='640', device=0, cameraName='cctv', classes=None, selectedClass=0, user_id=0) -> None:
         self.weights = weights
         self.source = source
         self.imgsz = imgsz
@@ -215,8 +215,6 @@ class Detech:
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
                         detections += int(n)
-                        # If violator detected
-                        # if self.names[int(c)] != self.model.names[self.selectedClass]:
                         self.classNames[self.names[int(c)]] = int(n)
 
 
@@ -246,8 +244,6 @@ class Detech:
                 
                 # cv2.cvtColor(im0, cv2.COLOR_BGR2RGB)
 
-
-
                 # Check violators and changes in qty
                 for violation in self.classNames:
                     if detections == 0:
@@ -256,7 +252,12 @@ class Detech:
                         self.percentage[violation] = f"{100*float(self.classNames[violation]/detections):.1f}"
                     if violation != self.model.names[self.selectedClass] and self.classNames[violation] != self.checker[violation] and self.classNames[violation] != 0:
                         # print("New Detection")
-                        playsound('sounds/notification.wav', False) # Play sound
+                        if violation == "facemask only":
+                            playsound('sounds/face-mask-only.wav', False) # Play sound
+                        elif violation == "faceshield only":
+                            playsound('sounds/face-shield-only.wav', False) # Play sound
+                        else:
+                            playsound('sounds/no-both.wav', False) # Play sound
                         if hasFileName == False:
                             dateFormat = datetime.datetime.now()
                             dateString = dateFormat.strftime("%d-%m-%Y-%H-%M-%S-%f")
