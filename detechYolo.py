@@ -10,12 +10,12 @@ import threading
 import datetime
 
 FILE = Path(__file__).resolve()
-sys.path.append(FILE.parents[0].as_posix())  # add yolov5/ to path
+sys.path.append(FILE.parents[0].as_posix())
 
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
-from utils.general import check_img_size, check_imshow, colorstr, is_ascii, \
-    non_max_suppression, scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path, \
+from utils.general import check_img_size, check_imshow, is_ascii, \
+    non_max_suppression, scale_coords, xyxy2xywh, set_logging, increment_path, \
     save_one_box, check_suffix
 from utils.plots import Annotator, colors
 from utils.torch_utils import select_device, time_sync
@@ -25,9 +25,8 @@ class Detech:
     conf_thres=0.7  # confidence threshold
     iou_thres=0.45  # NMS IOU threshold
     max_det=1000  # maximum detections per image
-    # device='cpu'  # cuda device, i.e. 0 or 0,1,2,3 or cpu
     view_img=False  # show results
-    save_img=False
+    save_img=False  # save images (if the source is images and not video)
     save_txt=False  # save results to *.txt
     save_conf=False  # save confidences in --save-txt labels
     save_crop=False  # save cropped prediction boxes
@@ -43,34 +42,34 @@ class Detech:
     hide_conf=False  # hide confidences
     half=False  # use FP16 half-precision inference
 
-    def __init__(self, weights='DetechModel.pt', source='0', imgsz='640', device=0, cameraName='cctv', classes=None, selectedClass=0, user_id=0) -> None:
-        self.weights = weights
-        self.source = source
-        self.imgsz = imgsz
-        self.device = device
-        self.cameraName = cameraName
-        self.classes = classes
-        self.th = threading.Thread(target=self.runInference, daemon=True)
-        self.isDetecting = False
-        self.frame = None
-        self.webcam = True
-        self.names = None
-        self.stride = None
-        self.ascii = None
-        self.pt = None
-        self.dataset = None
-        self.bs = None
-        self.model = None
-        self.save_dir = None
-        self.vid_path = None
-        self.vid_writer = None
-        self.Notifies = False
-        self.hasViolator = False
-        self.classNames = {"" : 0}
-        self.checker = {"": 0}
-        self.show_res = False
-        self.selectedClass = selectedClass
-        self.user_id = user_id
+    def __init__(self, weights='DetechModel.pt', source='0', imgsz='640', device='cpu', cameraName='cctv', classes=None, selectedClass=0, user_id=0) -> None:
+        self.weights = weights # Name of the custom trained model
+        self.source = source # Video source
+        self.imgsz = imgsz # Image size
+        self.device = device # Processing device
+        self.cameraName = cameraName # Camera name
+        self.classes = classes # Class names in the custom model
+        self.th = threading.Thread(target=self.runInference, daemon=True) # Thread for inference
+        self.isDetecting = False # Detecting status
+        self.frame = None # Annotated frame
+        self.webcam = True # Video source type
+        self.names = None # Class names
+        self.stride = None # Stride value
+        self.ascii = None # ASCII class names
+        self.pt = None # Pytorch model
+        self.dataset = None # Processed video source
+        self.bs = None # Batch Size
+        self.model = None # Processed custom model
+        self.save_dir = None # Directory for saving
+        self.vid_path = None # Path for video file
+        self.vid_writer = None # Video writer variable
+        self.Notifies = False # True to play sound
+        self.hasViolator = False # Existence of violator in the frame
+        self.classNames = {"" : 0} # Class name dictionary
+        self.checker = {"": 0} # Checker dictionary
+        self.show_res = False # Show result
+        self.selectedClass = selectedClass # Selected non-violator class
+        self.user_id = user_id # User ID of the program user
 
 
         FILE = Path(__file__).resolve()
@@ -87,6 +86,7 @@ class Detech:
         self.half &= self.device.type != self.device  # half precision only supported on CUDA
         pass
 
+    # Load the trained custom model
     def loadModel(self):
         w = self.weights[0] if isinstance(self.weights, list) else self.weights
         classify, suffix, suffixes = False, Path(w).suffix.lower(), ['.pt','']
@@ -103,12 +103,14 @@ class Detech:
             
         self.imgsz = check_img_size(self.imgsz, s=self.stride)  # check image size
         self.ascii = is_ascii(self.names)  # names are ascii (use PIL for UTF-8)
+
+        # Rename the class names
         self.model.names[0] = "with both"
         self.model.names[1] = "facemask only"
         self.model.names[2] = "faceshield only"
         self.model.names[3] = "without both"
-        print("Class names: ",self.model.names)
 
+    # Load the video source
     def loadData(self):
         if self.webcam:
             self.view_img = check_imshow()
@@ -120,22 +122,25 @@ class Detech:
             self.bs = 1  # batch_size
         self.vid_path, self.vid_writer = [None] * self.bs, [None] * self.bs
 
+    # Load all the requirements and start the inference
     def startInference(self):
         self.loadModel()
         self.loadData()
         self.isDetecting = True
         self.th.start()
-        # self.runInference()
 
+    # Stop the inference
     def stopInference(self):
         self.isDetecting = False
         self.dataset.stop()
         self.th.join()
 
+    # Start the inference
     def runInference(self):
         fileName = ""
         hasFileName = False
 
+        # Dictionary that contains detected class quantity for the previous frame
         self.checker = {
             "with both": 0,
             "facemask only": 0,
@@ -143,6 +148,7 @@ class Detech:
             "without both": 0
         }
 
+        #Dictionary that contains detected class percentage for the current frame
         self.percentage = {
             "with both": 0,
             "facemask only": 0,
@@ -157,10 +163,11 @@ class Detech:
 
         for path, img, im0s, vid_cap in self.dataset:
             
+            # Stop the loop if the inference is stopped
             if not self.isDetecting:
-                # print("breaking")
                 break
 
+            # Dictionary that contains detected class quantity for the current frame
             self.classNames = {
             "with both": 0,
             "facemask only": 0,
@@ -214,8 +221,8 @@ class Detech:
                     for c in det[:, -1].unique():
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
-                        detections += int(n)
-                        self.classNames[self.names[int(c)]] = int(n)
+                        detections += int(n) # Add current class detection quantity to the total detections quantity
+                        self.classNames[self.names[int(c)]] = int(n) # Current class quantity
 
 
                     # Write results
@@ -233,50 +240,47 @@ class Detech:
                             if self.save_crop:
                                 save_one_box(xyxy, imc, file=self.save_dir / 'crops' / self.names[c] / f'{p.stem}.jpg', BGR=True)
 
-                # Print time (inference-only)
-                # print(f'{s}Done. ({t3 - t2:.3f}s)')
-                # print(f'{1/(t3 - t2)} FPS')
-
                 # Stream results
                 im0 = annotator.result()
-                # im0.putText(self.classNames)
-                
-                
-                # cv2.cvtColor(im0, cv2.COLOR_BGR2RGB)
 
                 # Check violators and changes in qty
                 for violation in self.classNames:
-                    if detections == 0:
+                    if detections == 0: # Check if detections is 0 to avoid zero division
                         self.percentage[violation] = "0.0"
                     else:
-                        self.percentage[violation] = f"{100*float(self.classNames[violation]/detections):.1f}"
-                    if violation != self.model.names[self.selectedClass] and self.classNames[violation] != self.checker[violation] and self.classNames[violation] != 0:
-                        # print("New Detection")
+                        self.percentage[violation] = f"{100*float(self.classNames[violation]/detections):.1f}" # Get the percentage of the protection usage by dividing each detection with th summation of all detections
+                    if violation != self.model.names[self.selectedClass] and self.classNames[violation] != self.checker[violation] and self.classNames[violation] != 0: # Check if the detected class is a violation, check if the quantity of the violators is the same with the previous frame, check if the quantity is 0
+                        
+                        # Play different sound effects for each violation
                         if violation == "facemask only":
                             playsound('sounds/face-mask-only.wav', False) # Play sound
                         elif violation == "faceshield only":
                             playsound('sounds/face-shield-only.wav', False) # Play sound
                         else:
                             playsound('sounds/no-both.wav', False) # Play sound
+                        
+                        #Check if there is already a file name for the screenshot
                         if hasFileName == False:
-                            dateFormat = datetime.datetime.now()
-                            dateString = dateFormat.strftime("%d-%m-%Y-%H-%M-%S-%f")
-                            fileName = f"violators/{dateString}.jpg"
+                            dateFormat = datetime.datetime.now() # Get current date and time
+                            dateString = dateFormat.strftime("%d-%m-%Y-%H-%M-%S-%f") # Set format for date and time
+                            fileName = f"violators/{dateString}.jpg" # File name string
                             hasFileName = True
-                        self.saveScreenshot(fileName, im0)
-                        self.screenshotDb(violation, self.classNames[violation], self.cameraName, fileName)
+                        self.saveScreenshot(fileName, im0) # save screenshot to local device
+                        self.screenshotDb(violation, self.classNames[violation], self.cameraName, fileName) # Save violation to the database
                 
                 # Write percentage value
-                space = 15
+                space = 15 # Vertical space for each detection class text
+
+                # Write detected class percentage in the frame
                 for classnames in self.classNames:
                     cv2.putText(im0, f"{classnames}: {self.percentage[classnames]}%", (0,space), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255), 2)
                     space += 20
 
-                self.frame = im0
-                print(self.checker)
-                self.checker = self.classNames
+
+                self.frame = im0 # Set the current frame as the value of class variable frame
+                self.checker = self.classNames # Update the value of the checker variable
                     
-                hasFileName = False
+                hasFileName = False # Reset file name for different frame
 
                 if self.view_img and self.show_res:
                     cv2.imshow(str(p), im0)
